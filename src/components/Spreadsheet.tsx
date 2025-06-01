@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, MoreHorizontal, Bot, Edit3, X, AlertCircle, RefreshCw } from 'lucide-react';
+import { Plus, MoreHorizontal, Bot, Edit3, X, AlertCircle, RefreshCw, Zap } from 'lucide-react';
 import { aiService } from '../services/aiService';
 
 interface Cell {
@@ -126,6 +126,7 @@ export default function Spreadsheet() {
   const [editingHeader, setEditingHeader] = useState<string | null>(null);
   const [selectedCell, setSelectedCell] = useState<{ row: number; col: string } | null>(null);
   const [promptEditor, setPromptEditor] = useState<{ columnId: string; isOpen: boolean }>({ columnId: '', isOpen: false });
+  const [fillingColumns, setFillingColumns] = useState<Set<string>>(new Set());
 
   const addColumn = () => {
     const newId = `col_${Date.now()}`;
@@ -157,6 +158,47 @@ export default function Spreadsheet() {
     setColumns(columns.map(col => 
       col.id === colId ? { ...col, prompt, isAIColumn: prompt.length > 0 } : col
     ));
+  };
+
+  const fillColumn = async (columnId: string) => {
+    const column = columns.find(col => col.id === columnId);
+    if (!column?.isAIColumn || !column.prompt) return;
+
+    // Mark column as being filled
+    setFillingColumns(prev => new Set([...prev, columnId]));
+
+    try {
+      // Find all empty cells in this column
+      const emptyCellIndices = data
+        .map((row, index) => ({ row: row[columnId], index }))
+        .filter(({ row }) => !row?.value || row.value.trim() === '')
+        .map(({ index }) => index);
+
+      // Process cells in batches to avoid overwhelming the API
+      const batchSize = 3;
+      for (let i = 0; i < emptyCellIndices.length; i += batchSize) {
+        const batch = emptyCellIndices.slice(i, i + batchSize);
+        
+        // Process batch in parallel
+        await Promise.all(
+          batch.map(rowIndex => generateCellContent(rowIndex, columnId))
+        );
+
+        // Small delay between batches to be respectful to the API
+        if (i + batchSize < emptyCellIndices.length) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+    } catch (error) {
+      console.error('Error filling column:', error);
+    } finally {
+      // Remove column from filling state
+      setFillingColumns(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(columnId);
+        return newSet;
+      });
+    }
   };
 
   const handleCellClick = async (rowIndex: number, colId: string) => {
@@ -347,17 +389,33 @@ export default function Spreadsheet() {
                           {column.name}
                         </span>
                       </div>
-                      <button
-                        onClick={() => openPromptEditor(column.id)}
-                        className="p-1 hover:bg-gray-200 rounded transition-colors"
-                        title={column.isAIColumn ? 'Edit AI prompt' : 'Add AI prompt'}
-                      >
-                        {column.isAIColumn ? (
-                          <Edit3 size={14} className="text-blue-600" />
-                        ) : (
-                          <MoreHorizontal size={14} className="text-gray-400" />
+                      <div className="flex items-center gap-1">
+                        {column.isAIColumn && column.prompt && (
+                          <button
+                            onClick={() => fillColumn(column.id)}
+                            disabled={fillingColumns.has(column.id)}
+                            className="p-1 hover:bg-gray-200 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Fill all empty cells in this column"
+                          >
+                            {fillingColumns.has(column.id) ? (
+                              <div className="w-3.5 h-3.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                            ) : (
+                              <Zap size={14} className="text-green-600" />
+                            )}
+                          </button>
                         )}
-                      </button>
+                        <button
+                          onClick={() => openPromptEditor(column.id)}
+                          className="p-1 hover:bg-gray-200 rounded transition-colors"
+                          title={column.isAIColumn ? 'Edit AI prompt' : 'Add AI prompt'}
+                        >
+                          {column.isAIColumn ? (
+                            <Edit3 size={14} className="text-blue-600" />
+                          ) : (
+                            <MoreHorizontal size={14} className="text-gray-400" />
+                          )}
+                        </button>
+                      </div>
                     </div>
                   )}
                 </th>
@@ -443,9 +501,38 @@ export default function Spreadsheet() {
                             <div>
                               <span className="text-sm text-gray-900">{cell.value}</span>
                               {cell.source && (
-                                <p className="text-xs text-gray-500 mt-1" title={cell.source}>
-                                  Source: AI Research
-                                </p>
+                                <div className="text-xs text-gray-500 mt-1">
+                                  {(cell.source.startsWith('http') || cell.source.includes('http')) ? (
+                                    <div className="flex flex-wrap gap-1">
+                                      <span>Source: </span>
+                                      {cell.source.split(', ').map((url, index) => (
+                                        url.trim().startsWith('http') ? (
+                                          <a
+                                            key={index}
+                                            href={url.trim()}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-blue-600 hover:underline"
+                                            onClick={(e) => e.stopPropagation()}
+                                            title={url.trim()}
+                                          >
+                                            {new URL(url.trim()).hostname}
+                                            {index < cell.source!.split(', ').length - 1 && ', '}
+                                          </a>
+                                        ) : (
+                                          <span key={index}>
+                                            {url.trim()}
+                                            {index < cell.source!.split(', ').length - 1 && ', '}
+                                          </span>
+                                        )
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <p title={cell.source}>
+                                      Source: {cell.source}
+                                    </p>
+                                  )}
+                                </div>
                               )}
                             </div>
                           ) : column.isAIColumn && column.prompt ? (
