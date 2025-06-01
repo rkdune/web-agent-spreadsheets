@@ -11,6 +11,7 @@ interface FillCellRequest {
   context: Record<string, string>;
   columnKey: string;
   rowData: Record<string, string>;
+  model?: string;
 }
 
 interface FillCellResponse {
@@ -90,7 +91,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<FillCellR
     }
 
     const body: FillCellRequest = await request.json();
-    const { prompt, context, columnKey } = body;
+    const { prompt, context, columnKey, model } = body;
 
     // Validate required fields
     if (!prompt || !columnKey) {
@@ -130,72 +131,79 @@ TASK: ${prompt}
 
 You must search the web for current information and return only the requested information, nothing else.`;
 
+    // Determine which model to use
+    const selectedModel = model || 'gpt-4o';
+    const useWebSearch = !model || (model !== 'gpt-4.1' && (model === 'gpt-4o' || model === 'gpt-4o-mini'));
+
     try {
-      // Try using the new Responses API with web search first
-      const response = await openai.responses.create({
-        model: 'gpt-4o',
-        input: userPrompt,
-        tools: [
-          {
+      // Try using the new Responses API with web search first (for supported models)
+      if (useWebSearch) {
+        const response = await openai.responses.create({
+          model: selectedModel,
+          input: userPrompt,
+          tools: [
+            {
+              type: 'web_search_preview'
+            }
+          ],
+          tool_choice: {
             type: 'web_search_preview'
-          }
-        ],
-        tool_choice: {
-          type: 'web_search_preview'
-        },
-        temperature: 0.1,
-      });
+          },
+          temperature: 0.1,
+        });
 
-      // Extract the response content
-      let aiResponse = 'Not Found';
-      let sourceUrls: string[] = [];
+        // Extract the response content
+        let aiResponse = 'Not Found';
+        let sourceUrls: string[] = [];
 
-      if (response.output && response.output.length > 0) {
-        // Find the last message in the output
-        const lastMessage = response.output
-          .filter((item: any) => item.type === 'message')
-          .pop();
+        if (response.output && response.output.length > 0) {
+          // Find the last message in the output
+          const lastMessage = response.output
+            .filter((item: any) => item.type === 'message')
+            .pop();
 
-        if (lastMessage && lastMessage.type === 'message' && 'content' in lastMessage && lastMessage.content && lastMessage.content.length > 0) {
-          const textContent = lastMessage.content.find((content: any) => content.type === 'output_text');
-          if (textContent && 'text' in textContent) {
-            const rawResponse = textContent.text.trim() || 'Not Found';
-            
-            // Clean up the response and extract URLs
-            const { cleanText, extractedUrls } = cleanResponseAndExtractUrls(rawResponse);
-            aiResponse = cleanText || 'Not Found';
-            
-            // Combine extracted URLs with annotation URLs
-            if ('annotations' in textContent && textContent.annotations) {
-              const annotationUrls = textContent.annotations
-                .filter((annotation: any) => annotation.type === 'url_citation')
-                .map((annotation: any) => annotation.url);
-              sourceUrls = [...new Set([...extractedUrls, ...annotationUrls])].slice(0, 3);
-            } else {
-              sourceUrls = extractedUrls.slice(0, 3);
+          if (lastMessage && lastMessage.type === 'message' && 'content' in lastMessage && lastMessage.content && lastMessage.content.length > 0) {
+            const textContent = lastMessage.content.find((content: any) => content.type === 'output_text');
+            if (textContent && 'text' in textContent) {
+              const rawResponse = textContent.text.trim() || 'Not Found';
+              
+              // Clean up the response and extract URLs
+              const { cleanText, extractedUrls } = cleanResponseAndExtractUrls(rawResponse);
+              aiResponse = cleanText || 'Not Found';
+              
+              // Combine extracted URLs with annotation URLs
+              if ('annotations' in textContent && textContent.annotations) {
+                const annotationUrls = textContent.annotations
+                  .filter((annotation: any) => annotation.type === 'url_citation')
+                  .map((annotation: any) => annotation.url);
+                sourceUrls = [...new Set([...extractedUrls, ...annotationUrls])].slice(0, 3);
+              } else {
+                sourceUrls = extractedUrls.slice(0, 3);
+              }
             }
           }
         }
-      }
 
-      // Generate source description
-      const sourceDescription = sourceUrls.length > 0 
-        ? sourceUrls.join(', ')
-        : contextInfo 
-          ? `Company context: ${Object.keys(context).join(', ')}`
-          : 'Web search results';
+        // Generate source description
+        const sourceDescription = sourceUrls.length > 0 
+          ? sourceUrls.join(', ')
+          : contextInfo 
+            ? `Company context: ${Object.keys(context).join(', ')}`
+            : 'Web search results';
 
-      return NextResponse.json({
-        value: aiResponse,
-        source: sourceDescription,
-        success: true
-      });
-
-    } catch (responsesError) {
-      console.log('Responses API not available, falling back to Chat Completions:', responsesError);
-      
-      // Fallback to regular Chat Completions API if Responses API fails
-      const systemPrompt = `You are a business research assistant helping to fill spreadsheet cells with accurate information about companies.
+        return NextResponse.json({
+          value: aiResponse,
+          source: sourceDescription,
+          success: true
+        });
+      } else {
+        // For o3 and other models without web search, use Chat Completions
+        const completion = await openai.chat.completions.create({
+          model: selectedModel,
+          messages: [
+            {
+              role: 'system',
+              content: `You are a business research assistant helping to fill spreadsheet cells with accurate information about companies.
 
 INSTRUCTIONS:
 1. Research the requested information based on the prompt and context provided
@@ -211,36 +219,70 @@ ${contextInfo || 'No additional context provided'}
 
 TASK: ${prompt}
 
-Return only the requested information, nothing else.`;
+Return only the requested information, nothing else.`
+            },
+            {
+              role: 'user',
+              content: `Please find the information requested for this company.`
+            }
+          ],
+          max_tokens: 500,
+          temperature: 0.1,
+        });
 
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: systemPrompt
-          },
-          {
-            role: 'user',
-            content: `Please find the information requested for this company.`
-          }
-        ],
-        max_tokens: 500,
-        temperature: 0.1,
-      });
+        const aiResponse = completion.choices[0]?.message?.content?.trim() || 'Not Found';
 
-      const aiResponse = completion.choices[0]?.message?.content?.trim() || 'Not Found';
+        // Generate source description for non-web-search models
+        const sourceDescription = contextInfo 
+          ? `AI research based on company context: ${Object.keys(context).join(', ')}`
+          : `AI research using ${selectedModel}`;
 
-      // Generate source description for fallback
-      const sourceDescription = contextInfo 
-        ? `AI research based on company context: ${Object.keys(context).join(', ')}`
-        : 'AI research based on prompt instructions';
+        return NextResponse.json({
+          value: aiResponse,
+          source: sourceDescription,
+          success: true
+        });
+      }
 
-      return NextResponse.json({
-        value: aiResponse,
-        source: sourceDescription,
-        success: true
-      });
+    } catch (responsesError) {
+      console.log('Responses API not available, falling back to Chat Completions:', responsesError);
+      
+      // Handle specific OpenAI errors
+      if (responsesError instanceof Error) {
+        if (responsesError.message.includes('API key')) {
+          return NextResponse.json(
+            { 
+              value: '', 
+              source: '', 
+              success: false, 
+              error: 'Invalid API key' 
+            },
+            { status: 401 }
+          );
+        }
+        
+        if (responsesError.message.includes('quota')) {
+          return NextResponse.json(
+            { 
+              value: '', 
+              source: '', 
+              success: false, 
+              error: 'API quota exceeded' 
+            },
+            { status: 429 }
+          );
+        }
+      }
+
+      return NextResponse.json(
+        { 
+          value: '', 
+          source: '', 
+          success: false, 
+          error: 'Failed to generate content' 
+        },
+        { status: 500 }
+      );
     }
 
   } catch (error) {

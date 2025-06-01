@@ -3,6 +3,7 @@ interface FillCellRequest {
   context: Record<string, string>;
   columnKey: string;
   rowData: Record<string, string>;
+  model?: string;
 }
 
 interface FillCellResponse {
@@ -10,6 +11,11 @@ interface FillCellResponse {
   source: string;
   success: boolean;
   error?: string;
+}
+
+interface ComparisonResponse {
+  match: boolean;
+  confidence: number;
 }
 
 class AIService {
@@ -62,6 +68,81 @@ class AIService {
         success: false,
         error: 'Unknown error occurred'
       };
+    }
+  }
+
+  async fillCellWithModel(
+    prompt: string,
+    context: Record<string, string>,
+    columnKey: string,
+    rowData: Record<string, string>,
+    model: string
+  ): Promise<FillCellResponse> {
+    const requestBody: FillCellRequest = {
+      prompt,
+      context,
+      columnKey,
+      rowData,
+      model
+    };
+
+    try {
+      const response = await fetch(`${this.baseUrl}/fill-cell`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      const data: FillCellResponse = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || `HTTP error! status: ${response.status}`);
+      }
+
+      return data;
+    } catch (error) {
+      console.error('AI Service Error:', error);
+      
+      if (error instanceof Error) {
+        return {
+          value: '',
+          source: '',
+          success: false,
+          error: error.message
+        };
+      }
+
+      return {
+        value: '',
+        source: '',
+        success: false,
+        error: 'Unknown error occurred'
+      };
+    }
+  }
+
+  async compareResults(result1: string, result2: string): Promise<ComparisonResponse> {
+    try {
+      const response = await fetch(`${this.baseUrl}/compare-results`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ result1, result2 }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || `HTTP error! status: ${response.status}`);
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Comparison Error:', error);
+      return { match: false, confidence: 0 };
     }
   }
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, MoreHorizontal, Bot, Edit3, X, AlertCircle, RefreshCw, Zap } from 'lucide-react';
+import { Plus, MoreHorizontal, Bot, Edit3, X, AlertCircle, RefreshCw, Zap, FlaskConical, Trash2 } from 'lucide-react';
 import { aiService } from '../services/aiService';
 
 interface Cell {
@@ -16,6 +16,32 @@ interface Column {
   name: string;
   prompt?: string;
   isAIColumn?: boolean;
+}
+
+interface EvaluationResult {
+  promptA: {
+    mini: string[];
+    gpt41: string[];
+    accuracy: number;
+    cost: number;
+    avgResponseTime: number;
+  };
+  promptB: {
+    mini: string[];
+    gpt41: string[];
+    accuracy: number;
+    cost: number;
+    avgResponseTime: number;
+  };
+}
+
+interface PromptEvaluation {
+  columnId: string;
+  isOpen: boolean;
+  promptA: string;
+  promptB: string;
+  isRunning: boolean;
+  results?: EvaluationResult;
 }
 
 const initialColumns: Column[] = [
@@ -76,13 +102,6 @@ const initialData: Record<string, Cell>[] = [
     source: { value: 'https://www.blizzard.com' },
   },
   {
-    company: { value: 'Naughty Dog' },
-    website: { value: 'https://www.naughtydog.com' },
-    email: { value: '' },
-    phone: { value: '' },
-    source: { value: 'https://www.naughtydog.com' },
-  },
-  {
     company: { value: 'CD Projekt RED' },
     website: { value: 'https://www.cdprojektred.com' },
     email: { value: 'jobs@cdprojektred.com' },
@@ -125,7 +144,8 @@ export default function Spreadsheet() {
   const [editingCell, setEditingCell] = useState<{ row: number; col: string } | null>(null);
   const [editingHeader, setEditingHeader] = useState<string | null>(null);
   const [selectedCell, setSelectedCell] = useState<{ row: number; col: string } | null>(null);
-  const [promptEditor, setPromptEditor] = useState<{ columnId: string; isOpen: boolean }>({ columnId: '', isOpen: false });
+  const [promptEditor, setPromptEditor] = useState<PromptEvaluation>({ columnId: '', isOpen: false, promptA: '', promptB: '', isRunning: false });
+  const [promptEvaluator, setPromptEvaluator] = useState<PromptEvaluation>({ columnId: '', isOpen: false, promptA: '', promptB: '', isRunning: false });
   const [fillingColumns, setFillingColumns] = useState<Set<string>>(new Set());
 
   const addColumn = () => {
@@ -140,6 +160,28 @@ export default function Spreadsheet() {
       newRow[col.id] = { value: '' };
     });
     setData([...data, newRow]);
+  };
+
+  const deleteColumn = (columnId: string) => {
+    // Don't allow deleting the last column
+    if (columns.length <= 1) return;
+    
+    // Remove column from columns array
+    setColumns(columns.filter(col => col.id !== columnId));
+    
+    // Remove column data from all rows
+    setData(data.map(row => {
+      const newRow = { ...row };
+      delete newRow[columnId];
+      return newRow;
+    }));
+  };
+
+  const deleteRow = (rowIndex: number) => {
+    // Don't allow deleting the last row
+    if (data.length <= 1) return;
+    
+    setData(data.filter((_, index) => index !== rowIndex));
   };
 
   const updateCell = (rowIndex: number, colId: string, value: string) => {
@@ -305,12 +347,141 @@ export default function Spreadsheet() {
   };
 
   const openPromptEditor = (columnId: string) => {
-    setPromptEditor({ columnId, isOpen: true });
+    setPromptEditor({ columnId, isOpen: true, promptA: '', promptB: '', isRunning: false });
     setEditingHeader(null);
   };
 
   const closePromptEditor = () => {
-    setPromptEditor({ columnId: '', isOpen: false });
+    setPromptEditor({ columnId: '', isOpen: false, promptA: '', promptB: '', isRunning: false });
+  };
+
+  const openPromptEvaluator = (columnId: string) => {
+    const column = columns.find(col => col.id === columnId);
+    setPromptEvaluator({ 
+      columnId, 
+      isOpen: true, 
+      promptA: column?.prompt || '', 
+      promptB: '', 
+      isRunning: false 
+    });
+    setEditingHeader(null);
+  };
+
+  const closePromptEvaluator = () => {
+    setPromptEvaluator({ columnId: '', isOpen: false, promptA: '', promptB: '', isRunning: false });
+  };
+
+  const runPromptEvaluation = async () => {
+    if (!promptEvaluator.promptA || !promptEvaluator.promptB) return;
+
+    setPromptEvaluator(prev => ({ ...prev, isRunning: true }));
+
+    try {
+      const results = await evaluatePrompts(
+        promptEvaluator.columnId,
+        promptEvaluator.promptA,
+        promptEvaluator.promptB
+      );
+
+      setPromptEvaluator(prev => ({ ...prev, results, isRunning: false }));
+    } catch (error) {
+      console.error('Evaluation failed:', error);
+      setPromptEvaluator(prev => ({ ...prev, isRunning: false }));
+    }
+  };
+
+  const evaluatePrompts = async (columnId: string, promptA: string, promptB: string): Promise<EvaluationResult> => {
+    const contextData = data.map(row => {
+      const context = aiService.extractContext(row, columnId);
+      const rowDataForAPI: Record<string, string> = {};
+      Object.entries(row).forEach(([key, cell]) => {
+        rowDataForAPI[key] = cell?.value || '';
+      });
+      return { context, rowData: rowDataForAPI };
+    });
+
+    // Run all combinations
+    const [promptAMini, promptAGpt41, promptBMini, promptBGpt41] = await Promise.all([
+      runPromptOnModel(promptA, contextData, 'gpt-4o-mini'),
+      runPromptOnModel(promptA, contextData, 'gpt-4.1'),
+      runPromptOnModel(promptB, contextData, 'gpt-4o-mini'),
+      runPromptOnModel(promptB, contextData, 'gpt-4.1')
+    ]);
+
+    // Calculate accuracy by comparing mini results to gpt41 results
+    const promptAAccuracy = await calculateAccuracy(promptAMini.results, promptAGpt41.results);
+    const promptBAccuracy = await calculateAccuracy(promptBMini.results, promptBGpt41.results);
+
+    return {
+      promptA: {
+        mini: promptAMini.results,
+        gpt41: promptAGpt41.results,
+        accuracy: promptAAccuracy,
+        cost: promptAMini.cost + promptAGpt41.cost,
+        avgResponseTime: (promptAMini.avgTime + promptAGpt41.avgTime) / 2
+      },
+      promptB: {
+        mini: promptBMini.results,
+        gpt41: promptBGpt41.results,
+        accuracy: promptBAccuracy,
+        cost: promptBMini.cost + promptBGpt41.cost,
+        avgResponseTime: (promptBMini.avgTime + promptBGpt41.avgTime) / 2
+      }
+    };
+  };
+
+  const runPromptOnModel = async (
+    prompt: string, 
+    contextData: Array<{ context: Record<string, string>; rowData: Record<string, string> }>,
+    model: string
+  ) => {
+    const results: string[] = [];
+    let totalCost = 0;
+    let totalTime = 0;
+
+    for (const { context, rowData } of contextData) {
+      const startTime = Date.now();
+      
+      try {
+        const result = await aiService.fillCellWithModel(prompt, context, 'eval', rowData, model);
+        results.push(result.success ? result.value : 'Error');
+        
+        // Estimate cost (rough approximation)
+        const tokens = prompt.length / 4 + (result.value?.length || 0) / 4;
+        totalCost += model === 'gpt-4.1' ? tokens * 0.00015 : tokens * 0.000001; // Rough pricing
+        
+      } catch (error) {
+        results.push('Error');
+      }
+      
+      totalTime += Date.now() - startTime;
+    }
+
+    return {
+      results,
+      cost: totalCost,
+      avgTime: totalTime / contextData.length
+    };
+  };
+
+  const calculateAccuracy = async (miniResults: string[], gpt41Results: string[]): Promise<number> => {
+    let matches = 0;
+    
+    for (let i = 0; i < miniResults.length; i++) {
+      try {
+        const comparison = await aiService.compareResults(miniResults[i], gpt41Results[i]);
+        if (comparison.match) matches++;
+      } catch (error) {
+        // If comparison fails, assume no match
+      }
+    }
+    
+    return (matches / miniResults.length) * 100;
+  };
+
+  const applyPrompt = (prompt: string) => {
+    updateColumnPrompt(promptEvaluator.columnId, prompt);
+    closePromptEvaluator();
   };
 
   const getSelectedCellInfo = () => {
@@ -404,6 +575,15 @@ export default function Spreadsheet() {
                             )}
                           </button>
                         )}
+                        {column.isAIColumn && column.prompt && (
+                          <button
+                            onClick={() => openPromptEvaluator(column.id)}
+                            className="p-1 hover:bg-gray-200 rounded transition-colors"
+                            title="Test and optimize prompts"
+                          >
+                            <FlaskConical size={14} className="text-purple-600" />
+                          </button>
+                        )}
                         <button
                           onClick={() => openPromptEditor(column.id)}
                           className="p-1 hover:bg-gray-200 rounded transition-colors"
@@ -415,6 +595,15 @@ export default function Spreadsheet() {
                             <MoreHorizontal size={14} className="text-gray-400" />
                           )}
                         </button>
+                        {columns.length > 1 && (
+                          <button
+                            onClick={() => deleteColumn(column.id)}
+                            className="p-1 hover:bg-red-100 rounded transition-colors"
+                            title="Delete column"
+                          >
+                            <Trash2 size={14} className="text-red-500" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   )}
@@ -424,9 +613,20 @@ export default function Spreadsheet() {
           </thead>
           <tbody>
             {data.map((row, rowIndex) => (
-              <tr key={rowIndex} className="hover:bg-gray-50">
-                <td className="p-2 border-r border-b border-gray-200 text-center text-sm text-gray-500">
-                  {rowIndex + 1}
+              <tr key={rowIndex} className="hover:bg-gray-50 group">
+                <td className="p-2 border-r border-b border-gray-200 text-center text-sm text-gray-500 relative">
+                  <div className="flex items-center justify-center gap-1">
+                    <span>{rowIndex + 1}</span>
+                    {data.length > 1 && (
+                      <button
+                        onClick={() => deleteRow(rowIndex)}
+                        className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-red-100 rounded transition-all"
+                        title="Delete row"
+                      >
+                        <Trash2 size={12} className="text-red-500" />
+                      </button>
+                    )}
+                  </div>
                 </td>
                 {columns.map((column) => {
                   const cell = row[column.id] || { value: '' };
@@ -614,6 +814,228 @@ export default function Spreadsheet() {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Prompt Evaluator Modal */}
+      {promptEvaluator.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b">
+              <div className="flex items-center gap-2">
+                <FlaskConical size={20} className="text-purple-600" />
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Prompt Optimization for &quot;{columns.find(col => col.id === promptEvaluator.columnId)?.name}&quot;
+                </h2>
+              </div>
+              <button
+                onClick={closePromptEvaluator}
+                className="p-1 hover:bg-gray-100 rounded transition-colors"
+              >
+                <X size={20} className="text-gray-500" />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
+              {!promptEvaluator.results ? (
+                <div className="space-y-6">
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                    <h3 className="text-sm font-medium text-purple-900 mb-2">How Prompt Evaluation Works</h3>
+                    <p className="text-sm text-purple-700">
+                      We test your prompts on both GPT-4o mini (fast & cheap) and GPT-4.1 (expensive & accurate) to find the optimal cost/quality balance. 
+                      The evaluation runs on all {data.length} rows in your dataset.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Prompt A (Current)
+                      </label>
+                      <textarea
+                        value={promptEvaluator.promptA}
+                        onChange={(e) => setPromptEvaluator(prev => ({ ...prev, promptA: e.target.value }))}
+                        placeholder="Enter your first prompt variant..."
+                        className="w-full h-32 p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Prompt B (Alternative)
+                      </label>
+                      <textarea
+                        value={promptEvaluator.promptB}
+                        onChange={(e) => setPromptEvaluator(prev => ({ ...prev, promptB: e.target.value }))}
+                        placeholder="Enter your second prompt variant..."
+                        className="w-full h-32 p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-center">
+                    <button
+                      onClick={runPromptEvaluation}
+                      disabled={!promptEvaluator.promptA || !promptEvaluator.promptB || promptEvaluator.isRunning}
+                      className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      {promptEvaluator.isRunning ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          Running Evaluation...
+                        </>
+                      ) : (
+                        <>
+                          <FlaskConical size={16} />
+                          Run Evaluation
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <h3 className="text-sm font-medium text-green-900 mb-2">Evaluation Complete</h3>
+                    <p className="text-sm text-green-700">
+                      Tested both prompts on {data.length} rows using GPT-4o mini and GPT-4.1 models.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Prompt A Results */}
+                    <div className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold text-gray-900">Prompt A</h3>
+                        <button
+                          onClick={() => applyPrompt(promptEvaluator.promptA)}
+                          className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                        >
+                          Use This Prompt
+                        </button>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">Accuracy vs GPT-4.1:</span>
+                          <span className="text-lg font-semibold text-gray-900">
+                            {promptEvaluator.results.promptA.accuracy.toFixed(1)}%
+                          </span>
+                        </div>
+                        
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">Total Cost:</span>
+                          <span className="text-lg font-semibold text-gray-900">
+                            ${promptEvaluator.results.promptA.cost.toFixed(4)}
+                          </span>
+                        </div>
+                        
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">Avg Response Time:</span>
+                          <span className="text-lg font-semibold text-gray-900">
+                            {promptEvaluator.results.promptA.avgResponseTime.toFixed(0)}ms
+                          </span>
+                        </div>
+
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="bg-blue-600 h-2 rounded-full" 
+                            style={{ width: `${promptEvaluator.results.promptA.accuracy}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Prompt B Results */}
+                    <div className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold text-gray-900">Prompt B</h3>
+                        <button
+                          onClick={() => applyPrompt(promptEvaluator.promptB)}
+                          className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                        >
+                          Use This Prompt
+                        </button>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">Accuracy vs GPT-4.1:</span>
+                          <span className="text-lg font-semibold text-gray-900">
+                            {promptEvaluator.results.promptB.accuracy.toFixed(1)}%
+                          </span>
+                        </div>
+                        
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">Total Cost:</span>
+                          <span className="text-lg font-semibold text-gray-900">
+                            ${promptEvaluator.results.promptB.cost.toFixed(4)}
+                          </span>
+                        </div>
+                        
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">Avg Response Time:</span>
+                          <span className="text-lg font-semibold text-gray-900">
+                            {promptEvaluator.results.promptB.avgResponseTime.toFixed(0)}ms
+                          </span>
+                        </div>
+
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="bg-purple-600 h-2 rounded-full" 
+                            style={{ width: `${promptEvaluator.results.promptB.accuracy}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Winner Analysis */}
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-3">Analysis</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <span className="font-medium text-gray-700">Most Accurate:</span>
+                        <p className="text-gray-600">
+                          Prompt {promptEvaluator.results.promptA.accuracy > promptEvaluator.results.promptB.accuracy ? 'A' : 'B'} 
+                          ({Math.max(promptEvaluator.results.promptA.accuracy, promptEvaluator.results.promptB.accuracy).toFixed(1)}% accuracy)
+                        </p>
+                      </div>
+                      <div>
+                        <span className="font-medium text-gray-700">Most Cost-Effective:</span>
+                        <p className="text-gray-600">
+                          Prompt {promptEvaluator.results.promptA.cost < promptEvaluator.results.promptB.cost ? 'A' : 'B'} 
+                          (${Math.min(promptEvaluator.results.promptA.cost, promptEvaluator.results.promptB.cost).toFixed(4)})
+                        </p>
+                      </div>
+                      <div>
+                        <span className="font-medium text-gray-700">Fastest:</span>
+                        <p className="text-gray-600">
+                          Prompt {promptEvaluator.results.promptA.avgResponseTime < promptEvaluator.results.promptB.avgResponseTime ? 'A' : 'B'} 
+                          ({Math.min(promptEvaluator.results.promptA.avgResponseTime, promptEvaluator.results.promptB.avgResponseTime).toFixed(0)}ms avg)
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-center gap-3">
+                    <button
+                      onClick={() => setPromptEvaluator(prev => ({ ...prev, results: undefined }))}
+                      className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+                    >
+                      Run Another Test
+                    </button>
+                    <button
+                      onClick={closePromptEvaluator}
+                      className="px-4 py-2 text-sm bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
