@@ -87,23 +87,15 @@ Do they contain essentially the same information? Answer YES or NO only.`
   } catch (error) {
     console.error('Comparison API Error:', error);
     
-    // Fallback to simple string comparison if we can parse the body
-    try {
-      const body: CompareRequest = await request.json();
-      const result1Clean = body.result1?.toLowerCase().trim() || '';
-      const result2Clean = body.result2?.toLowerCase().trim() || '';
-      const similarity = calculateStringSimilarity(result1Clean, result2Clean);
-      
-      return NextResponse.json({
-        match: similarity > 80,
-        confidence: Math.round(similarity)
-      });
-    } catch (parseError) {
-      return NextResponse.json({
+    return NextResponse.json(
+      { 
         match: false,
-        confidence: 0
-      });
-    }
+        confidence: 0,
+        success: false, 
+        error: 'Failed to compare results' 
+      },
+      { status: 500 }
+    );
   }
 }
 

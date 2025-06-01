@@ -16,6 +16,7 @@ interface Column {
   name: string;
   prompt?: string;
   isAIColumn?: boolean;
+  model?: 'gpt-4o-mini' | 'gpt-4.1';
 }
 
 interface EvaluationResult {
@@ -50,25 +51,22 @@ const initialColumns: Column[] = [
     id: 'website', 
     name: 'Website', 
     prompt: 'Find the official website URL for this company. Look for their main corporate website, not social media or directory listings.',
-    isAIColumn: true 
+    isAIColumn: true,
+    model: 'gpt-4o-mini'
   },
   { 
     id: 'email', 
     name: 'Contact Email', 
     prompt: 'Research and find a business contact email for this company. Look for sales, info, or general inquiry email addresses.',
-    isAIColumn: true 
+    isAIColumn: true,
+    model: 'gpt-4o-mini'
   },
   { 
     id: 'phone', 
     name: 'Phone Number', 
     prompt: 'Find the main business phone number for this company. Prefer toll-free numbers or main office lines.',
-    isAIColumn: true 
-  },
-  { 
-    id: 'source', 
-    name: 'Source URL', 
-    prompt: 'Provide the URL where you found the information about this company. This should be a reliable business directory or the company\'s own website.',
-    isAIColumn: true 
+    isAIColumn: true,
+    model: 'gpt-4o-mini'
   },
 ];
 
@@ -78,63 +76,54 @@ const initialData: Record<string, Cell>[] = [
     website: { value: 'https://www.riotgames.com' },
     email: { value: 'info@riotgames.com' },
     phone: { value: '' },
-    source: { value: 'https://www.riotgames.com' },
   },
   {
     company: { value: 'Epic Games' },
     website: { value: 'https://www.epicgames.com' },
     email: { value: '' },
     phone: { value: '(919) 854-0070' },
-    source: { value: 'https://www.epicgames.com' },
   },
   {
     company: { value: 'Valve Corporation' },
     website: { value: 'https://www.valvesoftware.com' },
     email: { value: 'gaben@valvesoftware.com' },
     phone: { value: '(425) 889-9642' },
-    source: { value: 'https://www.valvesoftware.com' },
   },
   {
     company: { value: 'Blizzard Entertainment' },
     website: { value: 'https://www.blizzard.com' },
     email: { value: 'careers@blizzard.com' },
     phone: { value: '(949) 955-1380' },
-    source: { value: 'https://www.blizzard.com' },
   },
   {
     company: { value: 'CD Projekt RED' },
     website: { value: 'https://www.cdprojektred.com' },
     email: { value: 'jobs@cdprojektred.com' },
     phone: { value: '+48 22 519 69 00' },
-    source: { value: 'https://www.cdprojektred.com' },
   },
   {
     company: { value: 'Rockstar Games' },
     website: { value: 'https://www.rockstargames.com' },
     email: { value: 'info@rockstargames.com' },
     phone: { value: '(646) 536-2842' },
-    source: { value: 'https://www.rockstargames.com' },
   },
   {
     company: { value: 'Insomniac Games' },
     website: { value: 'https://insomniac.games' },
     email: { value: 'jobs@insomniac.games' },
     phone: { value: '' },
-    source: { value: 'https://insomniac.games' },
   },
   {
     company: { value: 'FromSoftware' },
     website: { value: '' },
     email: { value: '' },
     phone: { value: '' },
-    source: { value: '' },
   },
   {
     company: { value: 'Bungie' },
     website: { value: 'https://www.bungie.net' },
     email: { value: 'careers@bungie.com' },
     phone: { value: '(425) 440-6800' },
-    source: { value: 'https://www.bungie.net' },
   },
 ];
 
@@ -147,6 +136,7 @@ export default function Spreadsheet() {
   const [promptEditor, setPromptEditor] = useState<PromptEvaluation>({ columnId: '', isOpen: false, promptA: '', promptB: '', isRunning: false });
   const [promptEvaluator, setPromptEvaluator] = useState<PromptEvaluation>({ columnId: '', isOpen: false, promptA: '', promptB: '', isRunning: false });
   const [fillingColumns, setFillingColumns] = useState<Set<string>>(new Set());
+  const [promptEditorModel, setPromptEditorModel] = useState<'gpt-4o-mini' | 'gpt-4.1'>('gpt-4o-mini');
 
   const addColumn = () => {
     const newId = `col_${Date.now()}`;
@@ -199,6 +189,26 @@ export default function Spreadsheet() {
   const updateColumnPrompt = (colId: string, prompt: string) => {
     setColumns(columns.map(col => 
       col.id === colId ? { ...col, prompt, isAIColumn: prompt.length > 0 } : col
+    ));
+  };
+
+  const savePromptWithComplexity = async (colId: string, prompt: string, manualModel?: 'gpt-4o-mini' | 'gpt-4.1') => {
+    let selectedModel = manualModel;
+    
+    // If no manual model specified, assess complexity automatically
+    if (!manualModel && prompt.trim()) {
+      const complexity = await assessPromptComplexity(prompt);
+      selectedModel = (complexity === 'simple' || complexity === 'medium') ? 'gpt-4o-mini' : 'gpt-4.1';
+      setPromptEditorModel(selectedModel);
+    }
+    
+    setColumns(columns.map(col => 
+      col.id === colId ? { 
+        ...col, 
+        prompt, 
+        isAIColumn: prompt.length > 0,
+        model: selectedModel || 'gpt-4o-mini'
+      } : col
     ));
   };
 
@@ -283,11 +293,12 @@ export default function Spreadsheet() {
       });
 
       // Make AI API call
-      const result = await aiService.fillCellWithRetry(
+      const result = await aiService.fillCellWithModel(
         column.prompt,
         context,
         colId,
-        rowDataForAPI
+        rowDataForAPI,
+        column.model || 'gpt-4o-mini'
       );
 
       // Update cell with result
@@ -347,12 +358,15 @@ export default function Spreadsheet() {
   };
 
   const openPromptEditor = (columnId: string) => {
+    const column = columns.find(col => col.id === columnId);
     setPromptEditor({ columnId, isOpen: true, promptA: '', promptB: '', isRunning: false });
+    setPromptEditorModel(column?.model || 'gpt-4o-mini');
     setEditingHeader(null);
   };
 
   const closePromptEditor = () => {
     setPromptEditor({ columnId: '', isOpen: false, promptA: '', promptB: '', isRunning: false });
+    setPromptEditorModel('gpt-4o-mini');
   };
 
   const openPromptEvaluator = (columnId: string) => {
@@ -450,7 +464,7 @@ export default function Spreadsheet() {
         const tokens = prompt.length / 4 + (result.value?.length || 0) / 4;
         totalCost += model === 'gpt-4.1' ? tokens * 0.00015 : tokens * 0.000001; // Rough pricing
         
-      } catch (error) {
+      } catch {
         results.push('Error');
       }
       
@@ -471,7 +485,7 @@ export default function Spreadsheet() {
       try {
         const comparison = await aiService.compareResults(miniResults[i], gpt41Results[i]);
         if (comparison.match) matches++;
-      } catch (error) {
+      } catch {
         // If comparison fails, assume no match
       }
     }
@@ -482,6 +496,28 @@ export default function Spreadsheet() {
   const applyPrompt = (prompt: string) => {
     updateColumnPrompt(promptEvaluator.columnId, prompt);
     closePromptEvaluator();
+  };
+
+  const assessPromptComplexity = async (prompt: string): Promise<'simple' | 'medium' | 'complex'> => {
+    try {
+      const response = await fetch('/api/assess-complexity', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ prompt }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to assess complexity');
+      }
+
+      const result = await response.json();
+      return result.complexity || 'medium';
+    } catch (error) {
+      console.error('Error assessing prompt complexity:', error);
+      return 'medium'; // Default to medium on error
+    }
   };
 
   const getSelectedCellInfo = () => {
@@ -789,12 +825,60 @@ export default function Spreadsheet() {
                 />
               </div>
               
+              {/* Model Selection Toggle */}
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Task Complexity
+                  </label>
+                  <button
+                    onClick={async () => {
+                      const prompt = columns.find(col => col.id === promptEditor.columnId)?.prompt || '';
+                      if (prompt.trim()) {
+                        const complexity = await assessPromptComplexity(prompt);
+                        const suggestedModel = (complexity === 'simple' || complexity === 'medium') ? 'gpt-4o-mini' : 'gpt-4.1';
+                        setPromptEditorModel(suggestedModel);
+                      }
+                    }}
+                    className="px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded hover:bg-purple-200 transition-colors"
+                    title="Auto-assess complexity"
+                  >
+                    Auto
+                  </button>
+                </div>
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      value="gpt-4o-mini"
+                      checked={promptEditorModel === 'gpt-4o-mini'}
+                      onChange={(e) => setPromptEditorModel(e.target.value as 'gpt-4o-mini')}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">Simple (GPT-4o mini - Fast & Cheap)</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      value="gpt-4.1"
+                      checked={promptEditorModel === 'gpt-4.1'}
+                      onChange={(e) => setPromptEditorModel(e.target.value as 'gpt-4.1')}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">Complex (GPT-4.1 - Advanced & Accurate)</span>
+                  </label>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Model selection is auto-suggested based on task complexity, but you can override manually.
+                </p>
+              </div>
+              
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-sm text-gray-600">
                   <Bot size={16} className="text-blue-600" />
                   <span>
                     {columns.find(col => col.id === promptEditor.columnId)?.prompt 
-                      ? 'AI will use this prompt to fill cells automatically'
+                      ? `AI will use ${promptEditorModel === 'gpt-4o-mini' ? 'GPT-4o mini' : 'GPT-4.1'} for this column`
                       : 'Add a prompt to enable AI for this column'
                     }
                   </span>
@@ -807,7 +891,11 @@ export default function Spreadsheet() {
                     Cancel
                   </button>
                   <button
-                    onClick={closePromptEditor}
+                    onClick={async () => {
+                      const prompt = columns.find(col => col.id === promptEditor.columnId)?.prompt || '';
+                      await savePromptWithComplexity(promptEditor.columnId, prompt, promptEditorModel);
+                      closePromptEditor();
+                    }}
                     className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
                   >
                     Save Prompt
@@ -925,6 +1013,13 @@ export default function Spreadsheet() {
                           </span>
                         </div>
                         
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="bg-blue-600 h-2 rounded-full" 
+                            style={{ width: `${promptEvaluator.results.promptA.accuracy}%` }}
+                          ></div>
+                        </div>
+                        
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-gray-600">Total Cost:</span>
                           <span className="text-lg font-semibold text-gray-900">
@@ -937,13 +1032,6 @@ export default function Spreadsheet() {
                           <span className="text-lg font-semibold text-gray-900">
                             {promptEvaluator.results.promptA.avgResponseTime.toFixed(0)}ms
                           </span>
-                        </div>
-
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div 
-                            className="bg-blue-600 h-2 rounded-full" 
-                            style={{ width: `${promptEvaluator.results.promptA.accuracy}%` }}
-                          ></div>
                         </div>
                       </div>
                     </div>
@@ -968,6 +1056,13 @@ export default function Spreadsheet() {
                           </span>
                         </div>
                         
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="bg-purple-600 h-2 rounded-full" 
+                            style={{ width: `${promptEvaluator.results.promptB.accuracy}%` }}
+                          ></div>
+                        </div>
+                        
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-gray-600">Total Cost:</span>
                           <span className="text-lg font-semibold text-gray-900">
@@ -980,13 +1075,6 @@ export default function Spreadsheet() {
                           <span className="text-lg font-semibold text-gray-900">
                             {promptEvaluator.results.promptB.avgResponseTime.toFixed(0)}ms
                           </span>
-                        </div>
-
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div 
-                            className="bg-purple-600 h-2 rounded-full" 
-                            style={{ width: `${promptEvaluator.results.promptB.accuracy}%` }}
-                          ></div>
                         </div>
                       </div>
                     </div>
