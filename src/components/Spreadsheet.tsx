@@ -325,9 +325,9 @@ export default function Spreadsheet() {
   return (
     <div className="w-full">
       {/* Combined Header with Cell Viewer and Toolbar */}
-      <div className="flex items-center justify-between p-4 border-b bg-gray-50">
+      <div className="flex items-center justify-between py-2 px-4 border-b bg-gray-50">
         <div className="flex-1">
-          <p className="text-sm text-gray-700">
+          <p className="text-base text-gray-700">
             {cellContent || 'Select a cell to view its content'}
           </p>
         </div>
