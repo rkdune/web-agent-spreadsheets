@@ -34,6 +34,7 @@ interface EvaluationResult {
     cost: number;
     avgResponseTime: number;
   };
+  disagreementScore: number; // % disagreement between GPT-4.1 results of both prompts
 }
 
 interface PromptEvaluation {
@@ -426,6 +427,9 @@ export default function Spreadsheet() {
     const promptAAccuracy = await calculateAccuracy(promptAMini.results, promptAGpt41.results);
     const promptBAccuracy = await calculateAccuracy(promptBMini.results, promptBGpt41.results);
 
+    // Calculate disagreement between GPT-4.1 results (Prompt A as GT vs Prompt B)
+    const disagreementScore = await calculateDisagreementScore(promptAGpt41.results, promptBGpt41.results);
+
     return {
       promptA: {
         mini: promptAMini.results,
@@ -440,7 +444,8 @@ export default function Spreadsheet() {
         accuracy: promptBAccuracy,
         cost: promptBMini.cost + promptBGpt41.cost,
         avgResponseTime: (promptBMini.avgTime + promptBGpt41.avgTime) / 2
-      }
+      },
+      disagreementScore
     };
   };
 
@@ -491,6 +496,25 @@ export default function Spreadsheet() {
     }
     
     return (matches / miniResults.length) * 100;
+  };
+
+  const calculateDisagreementScore = async (gpt41ResultsA: string[], gpt41ResultsB: string[]): Promise<number> => {
+    let matches = 0;
+    
+    for (let i = 0; i < gpt41ResultsA.length; i++) {
+      try {
+        // Use same comparison logic as accuracy calculation
+        // Treat Prompt A results as "ground truth" and compare against Prompt B
+        const comparison = await aiService.compareResults(gpt41ResultsA[i], gpt41ResultsB[i]);
+        if (comparison.match) matches++;
+      } catch {
+        // If comparison fails, assume no match (disagreement)
+      }
+    }
+    
+    // Calculate agreement percentage, then return disagreement
+    const agreementPercentage = (matches / gpt41ResultsA.length) * 100;
+    return Math.abs(100 - agreementPercentage); // Return disagreement score
   };
 
   const applyPrompt = (prompt: string) => {
@@ -792,7 +816,7 @@ export default function Spreadsheet() {
 
       {/* Prompt Editor Modal */}
       {promptEditor.isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b">
               <div className="flex items-center gap-2">
@@ -909,7 +933,7 @@ export default function Spreadsheet() {
 
       {/* Prompt Evaluator Modal */}
       {promptEvaluator.isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b">
               <div className="flex items-center gap-2">
@@ -1105,6 +1129,64 @@ export default function Spreadsheet() {
                           ({Math.min(promptEvaluator.results.promptA.avgResponseTime, promptEvaluator.results.promptB.avgResponseTime).toFixed(0)}ms avg)
                         </p>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Disagreement Score */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Evaluation Validity</h3>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-medium text-gray-700">GPT-4.1 Disagreement Score:</span>
+                        <p className="text-sm text-gray-600 mt-1">
+                          How much the expensive models disagrees between prompts
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className={`text-2xl font-bold ${
+                          promptEvaluator.results.disagreementScore < 20 
+                            ? 'text-green-600' 
+                            : promptEvaluator.results.disagreementScore < 40 
+                            ? 'text-yellow-600' 
+                            : 'text-red-600'
+                        }`}>
+                          {promptEvaluator.results.disagreementScore.toFixed(1)}%
+                        </span>
+                        <p className={`text-xs mt-1 ${
+                          promptEvaluator.results.disagreementScore < 20 
+                            ? 'text-green-600' 
+                            : promptEvaluator.results.disagreementScore < 40 
+                            ? 'text-yellow-600' 
+                            : 'text-red-600'
+                        }`}>
+                          {promptEvaluator.results.disagreementScore < 20 
+                            ? 'High Validity' 
+                            : promptEvaluator.results.disagreementScore < 40 
+                            ? 'Medium Validity' 
+                            : 'Low Validity'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-3">
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className={`h-2 rounded-full ${
+                            promptEvaluator.results.disagreementScore < 20 
+                              ? 'bg-green-500' 
+                              : promptEvaluator.results.disagreementScore < 40 
+                              ? 'bg-yellow-500' 
+                              : 'bg-red-500'
+                          }`}
+                          style={{ width: `${Math.min(promptEvaluator.results.disagreementScore, 100)}%` }}
+                        ></div>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        {promptEvaluator.results.disagreementScore < 20 
+                          ? 'Low disagreement indicates accuracy comparisons are more meaningful.' 
+                          : promptEvaluator.results.disagreementScore < 40 
+                          ? 'Moderate disagreement suggests some differences in prompt performance.' 
+                          : 'High disagreement indicates evaluation may be less reliable.'}
+                      </p>
                     </div>
                   </div>
 
