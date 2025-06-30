@@ -1,9 +1,9 @@
 @import "tailwindcss";
 
 :root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 255, 255, 255;
-  --background-end-rgb: 255, 255, 255;
+  --foreground-rgb: 255, 255, 255;
+  --background-start-rgb: 33, 33, 33;
+  --background-end-rgb: 33, 33, 33;
 }
 
 body {
@@ -11,9 +11,9 @@ body {
   background: rgb(var(--background-end-rgb));
 }
 
-/* Force light mode - disable dark mode */
+/* Force dark mode */
 * {
-  color-scheme: light only;
+  color-scheme: dark only;
 }
 
 /* Custom scrollbar for better UX */

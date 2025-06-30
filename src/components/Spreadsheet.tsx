@@ -138,6 +138,7 @@ export default function Spreadsheet() {
   const [promptEvaluator, setPromptEvaluator] = useState<PromptEvaluation>({ columnId: '', isOpen: false, promptA: '', promptB: '', isRunning: false });
   const [fillingColumns, setFillingColumns] = useState<Set<string>>(new Set());
   const [promptEditorModel, setPromptEditorModel] = useState<'gpt-4o-mini' | 'gpt-4.1'>('gpt-4o-mini');
+  const [contactModalOpen, setContactModalOpen] = useState<boolean>(false);
 
   const addColumn = () => {
     const newId = `col_${Date.now()}`;
@@ -553,29 +554,49 @@ export default function Spreadsheet() {
 
   const cellContent = getSelectedCellInfo();
 
+  const openContactModal = () => {
+    setContactModalOpen(true);
+  };
+
+  const closeContactModal = () => {
+    setContactModalOpen(false);
+  };
+
   return (
     <div className="w-full">
       {/* Combined Header with Cell Viewer and Toolbar */}
-      <div className="flex items-center justify-between py-2 px-4 border-b bg-gray-50">
+      <div className="flex items-center justify-between py-2 px-4 border-b border-gray-700" style={{ backgroundColor: '#212121' }}>
         <div className="flex-1">
-          <p className="text-base text-gray-700">
+          <p className="text-base" style={{ color: '#F3EFF3' }}>
             {cellContent || 'Select a cell to view its content'}
           </p>
         </div>
         <div className="flex items-center gap-2 ml-4">
           <button
             onClick={addColumn}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-white border rounded-md hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-2 px-3 py-1.5 text-sm border border-gray-600 rounded-md transition-colors"
+            style={{ backgroundColor: '#212121', color: '#F3EFF3' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2A2A2A'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#212121'}
           >
             <Plus size={16} />
             Add Column
           </button>
           <button
             onClick={addRow}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-white border rounded-md hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-2 px-3 py-1.5 text-sm border border-gray-600 rounded-md transition-colors"
+            style={{ backgroundColor: '#212121', color: '#F3EFF3' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2A2A2A'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#212121'}
           >
             <Plus size={16} />
             Add Row
+          </button>
+          <button
+            onClick={openContactModal}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-600 text-white border border-blue-600 rounded-md hover:bg-blue-700 transition-colors"
+          >
+            Contact Me
           </button>
         </div>
       </div>
@@ -584,16 +605,15 @@ export default function Spreadsheet() {
       <div className="overflow-auto">
         <table className="w-full border-collapse">
           <thead>
-            <tr className="bg-gray-50">
-              <th className="w-12 p-2 border-r border-gray-200 text-center text-sm font-medium text-gray-500">
+            <tr style={{ backgroundColor: '#212121' }}>
+              <th className="w-12 p-2 border-r border-gray-600 text-center text-sm font-medium" style={{ color: '#F3EFF3' }}>
                 #
               </th>
               {columns.map((column) => (
                 <th
                   key={column.id}
-                  className={`min-w-[200px] p-2 border-r border-gray-200 text-left ${
-                    column.isAIColumn ? 'bg-blue-50' : 'bg-gray-50'
-                  }`}
+                  className="min-w-[200px] p-2 border-r border-gray-600 text-left"
+                  style={{ backgroundColor: '#212121' }}
                 >
                   {editingHeader === column.id ? (
                     <input
@@ -602,21 +622,22 @@ export default function Spreadsheet() {
                       onChange={(e) => updateColumnName(column.id, e.target.value)}
                       onBlur={handleHeaderBlur}
                       onKeyDown={(e) => e.key === 'Enter' && handleHeaderBlur()}
-                      className="w-full px-2 py-1 text-sm font-medium bg-white border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-2 py-1 text-sm font-medium border border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      style={{ backgroundColor: '#121212', color: '#F3EFF3' }}
                       autoFocus
                     />
                   ) : (
                     <div className="flex items-center justify-between">
                       <div
                         onClick={() => handleHeaderClick(column.id)}
-                        className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 px-2 py-1 rounded flex-1"
+                        className="flex items-center gap-2 cursor-pointer px-2 py-1 rounded flex-1"
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2A2A2A'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                       >
                         {column.isAIColumn && (
                           <Bot size={14} className="text-blue-600" />
                         )}
-                        <span className={`text-sm font-medium ${
-                          column.isAIColumn ? 'text-blue-700' : 'text-gray-700'
-                        }`}>
+                                                  <span className="text-sm font-medium" style={{ color: '#F3EFF3' }}>
                           {column.name}
                         </span>
                       </div>
@@ -625,7 +646,9 @@ export default function Spreadsheet() {
                           <button
                             onClick={() => fillColumn(column.id)}
                             disabled={fillingColumns.has(column.id)}
-                            className="p-1 hover:bg-gray-200 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="p-1 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            onMouseEnter={(e) => !e.currentTarget.disabled && (e.currentTarget.style.backgroundColor = '#2A2A2A')}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                             title="Fill all empty cells in this column"
                           >
                             {fillingColumns.has(column.id) ? (
@@ -638,7 +661,9 @@ export default function Spreadsheet() {
                         {column.isAIColumn && column.prompt && (
                           <button
                             onClick={() => openPromptEvaluator(column.id)}
-                            className="p-1 hover:bg-gray-200 rounded transition-colors"
+                            className="p-1 rounded transition-colors"
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2A2A2A'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                             title="Test and optimize prompts"
                           >
                             <FlaskConical size={14} className="text-purple-600" />
@@ -646,19 +671,23 @@ export default function Spreadsheet() {
                         )}
                         <button
                           onClick={() => openPromptEditor(column.id)}
-                          className="p-1 hover:bg-gray-200 rounded transition-colors"
+                          className="p-1 rounded transition-colors"
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2A2A2A'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                           title={column.isAIColumn ? 'Edit AI prompt' : 'Add AI prompt'}
                         >
                           {column.isAIColumn ? (
                             <Edit3 size={14} className="text-blue-600" />
                           ) : (
-                            <MoreHorizontal size={14} className="text-gray-400" />
+                            <MoreHorizontal size={14} style={{ color: '#B0B0B0' }} />
                           )}
                         </button>
                         {columns.length > 1 && (
                           <button
                             onClick={() => deleteColumn(column.id)}
-                            className="p-1 hover:bg-red-100 rounded transition-colors"
+                            className="p-1 rounded transition-colors"
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#5D1A1A'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                             title="Delete column"
                           >
                             <Trash2 size={14} className="text-red-500" />
@@ -673,14 +702,16 @@ export default function Spreadsheet() {
           </thead>
           <tbody>
             {data.map((row, rowIndex) => (
-              <tr key={rowIndex} className="hover:bg-gray-50 group">
-                <td className="p-2 border-r border-b border-gray-200 text-center text-sm text-gray-500 relative">
+              <tr key={rowIndex} className="group" style={{ backgroundColor: '#121212' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#1A1A1A'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#121212'}>
+                <td className="p-2 border-r border-b border-gray-600 text-center text-sm relative" style={{ color: '#F3EFF3' }}>
                   <div className="flex items-center justify-center gap-1">
                     <span>{rowIndex + 1}</span>
                     {data.length > 1 && (
                       <button
                         onClick={() => deleteRow(rowIndex)}
-                        className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-red-100 rounded transition-all"
+                        className="opacity-0 group-hover:opacity-100 p-0.5 rounded transition-all"
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#5D1A1A'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                         title="Delete row"
                       >
                         <Trash2 size={12} className="text-red-500" />
@@ -695,7 +726,7 @@ export default function Spreadsheet() {
                   return (
                     <td
                       key={column.id}
-                      className="p-0 border-r border-b border-gray-200 min-w-[200px]"
+                      className="p-0 border-r border-b border-gray-600 min-w-[200px]"
                     >
                       {isEditing ? (
                         <input
@@ -704,13 +735,17 @@ export default function Spreadsheet() {
                           onChange={(e) => updateCell(rowIndex, column.id, e.target.value)}
                           onBlur={handleCellBlur}
                           onKeyDown={(e) => e.key === 'Enter' && handleCellBlur()}
-                          className="w-full p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset"
+                          className="w-full p-2 text-sm border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset"
+                          style={{ backgroundColor: '#121212', color: '#F3EFF3' }}
                           autoFocus
                         />
                       ) : (
                         <div
                           onClick={() => handleCellClick(rowIndex, column.id)}
-                          className="p-2 min-h-[40px] cursor-pointer hover:bg-blue-50 transition-colors"
+                          className="p-2 min-h-[40px] cursor-pointer transition-colors"
+                          style={{ color: '#F3EFF3' }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#1A1A1A'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                         >
                           {cell.isGenerating ? (
                             <div className="flex items-center gap-2">
@@ -740,7 +775,10 @@ export default function Spreadsheet() {
                                       e.stopPropagation();
                                       clearCellError(rowIndex, column.id);
                                     }}
-                                    className="text-xs text-gray-500 hover:text-gray-700 ml-2"
+                                    className="text-xs ml-2"
+                                    style={{ color: '#B0B0B0' }}
+                                    onMouseEnter={(e) => e.currentTarget.style.color = '#F3EFF3'}
+                                    onMouseLeave={(e) => e.currentTarget.style.color = '#B0B0B0'}
                                   >
                                     Clear
                                   </button>
@@ -759,9 +797,9 @@ export default function Spreadsheet() {
                             </a>
                           ) : cell.value ? (
                             <div>
-                              <span className="text-sm text-gray-900">{cell.value}</span>
+                              <span className="text-sm" style={{ color: '#F3EFF3' }}>{cell.value}</span>
                               {cell.source && (
-                                <div className="text-xs text-gray-500 mt-1">
+                                <div className="text-xs mt-1" style={{ color: '#B0B0B0' }}>
                                   {(cell.source.startsWith('http') || cell.source.includes('http')) ? (
                                     <div className="flex flex-wrap gap-1">
                                       <span>Source: </span>
@@ -801,7 +839,7 @@ export default function Spreadsheet() {
                               <span className="text-sm">Click to generate</span>
                             </div>
                           ) : (
-                            <span className="text-sm text-gray-400">Click to edit</span>
+                                                          <span className="text-sm" style={{ color: '#B0B0B0' }}>Click to edit</span>
                           )}
                         </div>
                       )}
@@ -817,42 +855,46 @@ export default function Spreadsheet() {
       {/* Prompt Editor Modal */}
       {promptEditor.isOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b">
+          <div className="rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden" style={{ backgroundColor: '#212121' }}>
+            <div className="flex items-center justify-between p-4 border-b border-gray-600">
               <div className="flex items-center gap-2">
                 <Bot size={20} className="text-blue-600" />
-                <h2 className="text-lg font-semibold text-gray-900">
+                <h2 className="text-lg font-semibold" style={{ color: '#F3EFF3' }}>
                   AI Prompt for &quot;{columns.find(col => col.id === promptEditor.columnId)?.name}&quot;
                 </h2>
               </div>
               <button
                 onClick={closePromptEditor}
-                className="p-1 hover:bg-gray-100 rounded transition-colors"
+                className="p-1 rounded transition-colors"
+                style={{ color: '#F3EFF3' }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2A2A2A'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
               >
-                <X size={20} className="text-gray-500" />
+                <X size={20} />
               </button>
             </div>
             
             <div className="p-4">
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium mb-2" style={{ color: '#F3EFF3' }}>
                   AI Instruction
                 </label>
-                <p className="text-sm text-gray-600 mb-3">
+                <p className="text-sm mb-3" style={{ color: '#B0B0B0' }}>
                   Describe what the AI should research and fill in for this column. Be specific about the type of information you want.
                 </p>
                 <textarea
                   value={columns.find(col => col.id === promptEditor.columnId)?.prompt || ''}
                   onChange={(e) => updateColumnPrompt(promptEditor.columnId, e.target.value)}
                   placeholder="Example: Find the official website URL for this company."
-                  className="w-full h-32 p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  className="w-full h-32 p-3 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  style={{ backgroundColor: '#121212', color: '#F3EFF3' }}
                 />
               </div>
               
               {/* Model Selection Toggle */}
               <div className="mb-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <label className="block text-sm font-medium text-gray-700">
+                  <label className="block text-sm font-medium" style={{ color: '#F3EFF3' }}>
                     Task Complexity
                   </label>
                   <button
@@ -864,7 +906,10 @@ export default function Spreadsheet() {
                         setPromptEditorModel(suggestedModel);
                       }
                     }}
-                    className="px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded hover:bg-purple-200 transition-colors"
+                    className="px-2 py-1 text-xs rounded transition-colors"
+                    style={{ backgroundColor: '#7c3aed', color: '#F3EFF3' }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#6d28d9'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#7c3aed'}
                     title="Auto-assess complexity"
                   >
                     Auto
@@ -879,7 +924,7 @@ export default function Spreadsheet() {
                       onChange={(e) => setPromptEditorModel(e.target.value as 'gpt-4o-mini')}
                       className="mr-2"
                     />
-                    <span className="text-sm">Simple (GPT-4o mini - Fast & Cheap)</span>
+                    <span className="text-sm" style={{ color: '#F3EFF3' }}>Simple (GPT-4o mini - Fast & Cheap)</span>
                   </label>
                   <label className="flex items-center">
                     <input
@@ -889,16 +934,16 @@ export default function Spreadsheet() {
                       onChange={(e) => setPromptEditorModel(e.target.value as 'gpt-4.1')}
                       className="mr-2"
                     />
-                    <span className="text-sm">Complex (GPT-4.1 - Advanced & Accurate)</span>
+                    <span className="text-sm" style={{ color: '#F3EFF3' }}>Complex (GPT-4.1 - Advanced & Accurate)</span>
                   </label>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs mt-1" style={{ color: '#B0B0B0' }}>
                   Model selection is auto-suggested based on task complexity, but you can override manually.
                 </p>
               </div>
               
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm text-gray-600">
+                <div className="flex items-center gap-2 text-sm" style={{ color: '#B0B0B0' }}>
                   <Bot size={16} className="text-blue-600" />
                   <span>
                     {columns.find(col => col.id === promptEditor.columnId)?.prompt 
@@ -910,7 +955,10 @@ export default function Spreadsheet() {
                 <div className="flex gap-2">
                   <button
                     onClick={closePromptEditor}
-                    className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+                    className="px-4 py-2 text-sm transition-colors"
+                    style={{ color: '#B0B0B0' }}
+                    onMouseEnter={(e) => e.currentTarget.style.color = '#F3EFF3'}
+                    onMouseLeave={(e) => e.currentTarget.style.color = '#B0B0B0'}
                   >
                     Cancel
                   </button>
@@ -920,7 +968,10 @@ export default function Spreadsheet() {
                       await savePromptWithComplexity(promptEditor.columnId, prompt, promptEditorModel);
                       closePromptEditor();
                     }}
-                    className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                    className="px-4 py-2 text-sm rounded-md transition-colors"
+                    style={{ backgroundColor: '#2563eb', color: '#F3EFF3' }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#1d4ed8'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#2563eb'}
                   >
                     Save Prompt
                   </button>
@@ -934,28 +985,31 @@ export default function Spreadsheet() {
       {/* Prompt Evaluator Modal */}
       {promptEvaluator.isOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b">
+          <div className="rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-hidden" style={{ backgroundColor: '#212121' }}>
+            <div className="flex items-center justify-between p-4 border-b border-gray-600">
               <div className="flex items-center gap-2">
                 <FlaskConical size={20} className="text-purple-600" />
-                <h2 className="text-lg font-semibold text-gray-900">
+                <h2 className="text-lg font-semibold" style={{ color: '#F3EFF3' }}>
                   Prompt Optimization for &quot;{columns.find(col => col.id === promptEvaluator.columnId)?.name}&quot;
                 </h2>
               </div>
               <button
                 onClick={closePromptEvaluator}
-                className="p-1 hover:bg-gray-100 rounded transition-colors"
+                className="p-1 rounded transition-colors"
+                style={{ color: '#F3EFF3' }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2A2A2A'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
               >
-                <X size={20} className="text-gray-500" />
+                <X size={20} />
               </button>
             </div>
             
             <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
               {!promptEvaluator.results ? (
                 <div className="space-y-6">
-                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                    <h3 className="text-sm font-medium text-purple-900 mb-2">How Prompt Evaluation Works</h3>
-                    <p className="text-sm text-purple-700">
+                  <div className="border border-purple-600 rounded-lg p-4" style={{ backgroundColor: '#2D1B4E' }}>
+                    <h3 className="text-sm font-medium mb-2" style={{ color: '#E6D7FF' }}>How Prompt Evaluation Works</h3>
+                    <p className="text-sm" style={{ color: '#C4B0E6' }}>
                       We test your prompts on both GPT-4o mini (fast & cheap) and GPT-4.1 (expensive & accurate) to find the optimal cost/quality balance. 
                       The evaluation runs on all {data.length} rows in your dataset.
                     </p>
@@ -963,26 +1017,28 @@ export default function Spreadsheet() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-medium mb-2" style={{ color: '#F3EFF3' }}>
                         Prompt A (Current)
                       </label>
                       <textarea
                         value={promptEvaluator.promptA}
                         onChange={(e) => setPromptEvaluator(prev => ({ ...prev, promptA: e.target.value }))}
                         placeholder="Enter your first prompt variant..."
-                        className="w-full h-32 p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                        className="w-full h-32 p-3 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                        style={{ backgroundColor: '#121212', color: '#F3EFF3' }}
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-medium mb-2" style={{ color: '#F3EFF3' }}>
                         Prompt B (Alternative)
                       </label>
                       <textarea
                         value={promptEvaluator.promptB}
                         onChange={(e) => setPromptEvaluator(prev => ({ ...prev, promptB: e.target.value }))}
                         placeholder="Enter your second prompt variant..."
-                        className="w-full h-32 p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                        className="w-full h-32 p-3 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                        style={{ backgroundColor: '#121212', color: '#F3EFF3' }}
                       />
                     </div>
                   </div>
@@ -991,7 +1047,13 @@ export default function Spreadsheet() {
                     <button
                       onClick={runPromptEvaluation}
                       disabled={!promptEvaluator.promptA || !promptEvaluator.promptB || promptEvaluator.isRunning}
-                      className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      className="px-6 py-3 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+                      style={{ 
+                        backgroundColor: promptEvaluator.isRunning ? '#6d28d9' : '#7c3aed', 
+                        color: '#F3EFF3' 
+                      }}
+                      onMouseEnter={(e) => !e.currentTarget.disabled && (e.currentTarget.style.backgroundColor = '#6d28d9')}
+                      onMouseLeave={(e) => !e.currentTarget.disabled && (e.currentTarget.style.backgroundColor = '#7c3aed')}
                     >
                       {promptEvaluator.isRunning ? (
                         <>
@@ -1009,21 +1071,24 @@ export default function Spreadsheet() {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                    <h3 className="text-sm font-medium text-green-900 mb-2">Evaluation Complete</h3>
-                    <p className="text-sm text-green-700">
+                  <div className="border border-green-600 rounded-lg p-4" style={{ backgroundColor: '#1B3B36' }}>
+                    <h3 className="text-sm font-medium mb-2" style={{ color: '#A7F3D0' }}>Evaluation Complete</h3>
+                    <p className="text-sm" style={{ color: '#86EFAC' }}>
                       Tested both prompts on {data.length} rows using GPT-4o mini and GPT-4.1 models.
                     </p>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Prompt A Results */}
-                    <div className="border border-gray-200 rounded-lg p-4">
+                    <div className="border border-gray-600 rounded-lg p-4" style={{ backgroundColor: '#1A1A1A' }}>
                       <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-semibold text-gray-900">Prompt A</h3>
+                        <h3 className="text-lg font-semibold" style={{ color: '#F3EFF3' }}>Prompt A</h3>
                         <button
                           onClick={() => applyPrompt(promptEvaluator.promptA)}
-                          className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                          className="px-3 py-1 text-sm rounded transition-colors"
+                          style={{ backgroundColor: '#2563eb', color: '#F3EFF3' }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#1d4ed8'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#2563eb'}
                         >
                           Use This Prompt
                         </button>
@@ -1031,13 +1096,13 @@ export default function Spreadsheet() {
                       
                       <div className="space-y-3">
                         <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-600">Accuracy vs GPT-4.1:</span>
-                          <span className="text-lg font-semibold text-gray-900">
+                          <span className="text-sm" style={{ color: '#B0B0B0' }}>Accuracy vs GPT-4.1:</span>
+                          <span className="text-lg font-semibold" style={{ color: '#F3EFF3' }}>
                             {promptEvaluator.results.promptA.accuracy.toFixed(1)}%
                           </span>
                         </div>
                         
-                        <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div className="w-full bg-gray-600 rounded-full h-2">
                           <div 
                             className="bg-blue-600 h-2 rounded-full" 
                             style={{ width: `${promptEvaluator.results.promptA.accuracy}%` }}
@@ -1045,15 +1110,15 @@ export default function Spreadsheet() {
                         </div>
                         
                         <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-600">Total Cost:</span>
-                          <span className="text-lg font-semibold text-gray-900">
+                          <span className="text-sm" style={{ color: '#B0B0B0' }}>Total Cost:</span>
+                          <span className="text-lg font-semibold" style={{ color: '#F3EFF3' }}>
                             ${promptEvaluator.results.promptA.cost.toFixed(4)}
                           </span>
                         </div>
                         
                         <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-600">Avg Response Time:</span>
-                          <span className="text-lg font-semibold text-gray-900">
+                          <span className="text-sm" style={{ color: '#B0B0B0' }}>Avg Response Time:</span>
+                          <span className="text-lg font-semibold" style={{ color: '#F3EFF3' }}>
                             {promptEvaluator.results.promptA.avgResponseTime.toFixed(0)}ms
                           </span>
                         </div>
@@ -1061,12 +1126,15 @@ export default function Spreadsheet() {
                     </div>
 
                     {/* Prompt B Results */}
-                    <div className="border border-gray-200 rounded-lg p-4">
+                    <div className="border border-gray-600 rounded-lg p-4" style={{ backgroundColor: '#1A1A1A' }}>
                       <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-semibold text-gray-900">Prompt B</h3>
+                        <h3 className="text-lg font-semibold" style={{ color: '#F3EFF3' }}>Prompt B</h3>
                         <button
                           onClick={() => applyPrompt(promptEvaluator.promptB)}
-                          className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                          className="px-3 py-1 text-sm rounded transition-colors"
+                          style={{ backgroundColor: '#2563eb', color: '#F3EFF3' }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#1d4ed8'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#2563eb'}
                         >
                           Use This Prompt
                         </button>
@@ -1074,13 +1142,13 @@ export default function Spreadsheet() {
                       
                       <div className="space-y-3">
                         <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-600">Accuracy vs GPT-4.1:</span>
-                          <span className="text-lg font-semibold text-gray-900">
+                          <span className="text-sm" style={{ color: '#B0B0B0' }}>Accuracy vs GPT-4.1:</span>
+                          <span className="text-lg font-semibold" style={{ color: '#F3EFF3' }}>
                             {promptEvaluator.results.promptB.accuracy.toFixed(1)}%
                           </span>
                         </div>
                         
-                        <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div className="w-full bg-gray-600 rounded-full h-2">
                           <div 
                             className="bg-purple-600 h-2 rounded-full" 
                             style={{ width: `${promptEvaluator.results.promptB.accuracy}%` }}
@@ -1088,15 +1156,15 @@ export default function Spreadsheet() {
                         </div>
                         
                         <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-600">Total Cost:</span>
-                          <span className="text-lg font-semibold text-gray-900">
+                          <span className="text-sm" style={{ color: '#B0B0B0' }}>Total Cost:</span>
+                          <span className="text-lg font-semibold" style={{ color: '#F3EFF3' }}>
                             ${promptEvaluator.results.promptB.cost.toFixed(4)}
                           </span>
                         </div>
                         
                         <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-600">Avg Response Time:</span>
-                          <span className="text-lg font-semibold text-gray-900">
+                          <span className="text-sm" style={{ color: '#B0B0B0' }}>Avg Response Time:</span>
+                          <span className="text-lg font-semibold" style={{ color: '#F3EFF3' }}>
                             {promptEvaluator.results.promptB.avgResponseTime.toFixed(0)}ms
                           </span>
                         </div>
@@ -1105,26 +1173,26 @@ export default function Spreadsheet() {
                   </div>
 
                   {/* Winner Analysis */}
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-3">Analysis</h3>
+                  <div className="border border-gray-600 rounded-lg p-4" style={{ backgroundColor: '#1A1A1A' }}>
+                    <h3 className="text-lg font-semibold mb-3" style={{ color: '#F3EFF3' }}>Analysis</h3>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                       <div>
-                        <span className="font-medium text-gray-700">Most Accurate:</span>
-                        <p className="text-gray-600">
+                        <span className="font-medium" style={{ color: '#F3EFF3' }}>Most Accurate:</span>
+                        <p style={{ color: '#B0B0B0' }}>
                           Prompt {promptEvaluator.results.promptA.accuracy > promptEvaluator.results.promptB.accuracy ? 'A' : 'B'} 
                           ({Math.max(promptEvaluator.results.promptA.accuracy, promptEvaluator.results.promptB.accuracy).toFixed(1)}% accuracy)
                         </p>
                       </div>
                       <div>
-                        <span className="font-medium text-gray-700">Most Cost-Effective:</span>
-                        <p className="text-gray-600">
+                        <span className="font-medium" style={{ color: '#F3EFF3' }}>Most Cost-Effective:</span>
+                        <p style={{ color: '#B0B0B0' }}>
                           Prompt {promptEvaluator.results.promptA.cost < promptEvaluator.results.promptB.cost ? 'A' : 'B'} 
                           (${Math.min(promptEvaluator.results.promptA.cost, promptEvaluator.results.promptB.cost).toFixed(4)})
                         </p>
                       </div>
                       <div>
-                        <span className="font-medium text-gray-700">Fastest:</span>
-                        <p className="text-gray-600">
+                        <span className="font-medium" style={{ color: '#F3EFF3' }}>Fastest:</span>
+                        <p style={{ color: '#B0B0B0' }}>
                           Prompt {promptEvaluator.results.promptA.avgResponseTime < promptEvaluator.results.promptB.avgResponseTime ? 'A' : 'B'} 
                           ({Math.min(promptEvaluator.results.promptA.avgResponseTime, promptEvaluator.results.promptB.avgResponseTime).toFixed(0)}ms avg)
                         </p>
@@ -1133,12 +1201,12 @@ export default function Spreadsheet() {
                   </div>
 
                   {/* Disagreement Score */}
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Evaluation Validity</h3>
+                  <div className="border border-blue-600 rounded-lg p-4" style={{ backgroundColor: '#1B2A4E' }}>
+                    <h3 className="text-lg font-semibold mb-2" style={{ color: '#BFDBFE' }}>Evaluation Validity</h3>
                     <div className="flex items-center justify-between">
                       <div>
-                        <span className="font-medium text-gray-700">GPT-4.1 Disagreement Score:</span>
-                        <p className="text-sm text-gray-600 mt-1">
+                        <span className="font-medium" style={{ color: '#BFDBFE' }}>GPT-4.1 Disagreement Score:</span>
+                        <p className="text-sm mt-1" style={{ color: '#93C5FD' }}>
                           How much the expensive models disagrees between prompts
                         </p>
                       </div>
@@ -1168,7 +1236,7 @@ export default function Spreadsheet() {
                       </div>
                     </div>
                     <div className="mt-3">
-                      <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className="w-full bg-gray-600 rounded-full h-2">
                         <div 
                           className={`h-2 rounded-full ${
                             promptEvaluator.results.disagreementScore < 20 
@@ -1180,7 +1248,7 @@ export default function Spreadsheet() {
                           style={{ width: `${Math.min(promptEvaluator.results.disagreementScore, 100)}%` }}
                         ></div>
                       </div>
-                      <p className="text-xs text-gray-500 mt-2">
+                      <p className="text-xs mt-2" style={{ color: '#93C5FD' }}>
                         {promptEvaluator.results.disagreementScore < 20 
                           ? 'Low disagreement indicates accuracy comparisons are more meaningful.' 
                           : promptEvaluator.results.disagreementScore < 40 
@@ -1193,19 +1261,87 @@ export default function Spreadsheet() {
                   <div className="flex justify-center gap-3">
                     <button
                       onClick={() => setPromptEvaluator(prev => ({ ...prev, results: undefined }))}
-                      className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+                      className="px-4 py-2 text-sm transition-colors"
+                      style={{ color: '#B0B0B0' }}
+                      onMouseEnter={(e) => e.currentTarget.style.color = '#F3EFF3'}
+                      onMouseLeave={(e) => e.currentTarget.style.color = '#B0B0B0'}
                     >
                       Run Another Test
                     </button>
                     <button
                       onClick={closePromptEvaluator}
-                      className="px-4 py-2 text-sm bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors"
+                      className="px-4 py-2 text-sm rounded-md transition-colors"
+                      style={{ backgroundColor: '#4B5563', color: '#F3EFF3' }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#374151'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#4B5563'}
                     >
                       Close
                     </button>
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Contact Modal */}
+      {contactModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h2 className="text-lg font-semibold text-gray-900">
+                Get in Touch
+              </h2>
+              <button
+                onClick={closeContactModal}
+                className="p-1 hover:bg-gray-100 rounded transition-colors"
+              >
+                <X size={20} className="text-gray-500" />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <p className="text-gray-700 text-sm leading-relaxed">
+                    If you liked this demo, I&apos;d love to chat!
+                  </p>
+                  <p className="text-gray-700 text-sm leading-relaxed">
+                    My twitter/X is <a href="https://twitter.com/rohankalia_" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800">@rohankalia_</a>
+                  </p>
+                </div>
+                <div className="flex-shrink-0">
+                  <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img 
+                      src="/profile_square.jpg" 
+                      alt="Rohan's Profile" 
+                      className="w-full h-full rounded-full object-cover"
+                      onError={(e) => {
+                        const img = e.currentTarget;
+                        const fallback = img.nextElementSibling as HTMLElement | null;
+                        img.style.display = 'none';
+                        if (fallback) {
+                          fallback.style.display = 'flex';
+                        }
+                      }}
+                    />
+                    <div className="w-full h-full rounded-full bg-gray-300 flex items-center justify-center text-gray-600 text-lg font-semibold" style={{ display: 'none' }}>
+                      R
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={closeContactModal}
+                  className="px-4 py-2 text-sm bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
