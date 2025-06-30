@@ -1,6 +1,6 @@
 # Agentic Spreadsheet
 ![Agentic Spreadsheet Demo](README_GIF.gif)
-**Excel on steroids.** An AI-native spreadsheet app where every data imputation is done by OpenAI web agents. Try it out: [agenticsheets.vercel.app](https://agenticsheets.vercel.app)
+**Excel on steroids.** An AI-native spreadsheet app where all data entry is done by OpenAI web agents. Try it out: [agenticsheets.vercel.app](https://agenticsheets.vercel.app)
 
 ## Features
 
