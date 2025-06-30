@@ -25,7 +25,7 @@ export default function WelcomeModal() {
             
         <div className="pr-8">
           <p className="leading-relaxed" style={{ color: '#F3EFF3' }}>
-            Hi, I&apos;m Rohan <span className="text-lg">👋</span>. I built a working prototype of a AI-native spreadsheet. Every data imputation is done by a web agents! Other than the example data the sheet starts with, none of the functionality is hardcoded.
+            Hi, I&apos;m Rohan <span className="text-lg">👋</span>. I built a working prototype of a AI-native spreadsheet. All data entry is done by a web agents! Other than the example data the sheet starts with, none of the functionality is hardcoded.
           </p>
           
           <div className="mt-3 space-y-2">
