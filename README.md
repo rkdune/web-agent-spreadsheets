@@ -1,4 +1,4 @@
-# Agentic Spreadsheet <img src="src/app/favicon.ico" width="30" height="30" style="vertical-align: middle;">
+# Agentic Spreadsheet
 ![Agentic Spreadsheet Demo](README_GIF.gif)
 **Excel on steroids.** An AI-native spreadsheet app where all data entry is done by OpenAI web agents. Try it out: [agenticsheets.vercel.app](https://agenticsheets.vercel.app)
 
